@@ -1,0 +1,105 @@
+--description: 
+--Sends a prompt to ChatGPT and processes the answer
+--This program has to be called from another one where the ChatGPT API service has been created, as described in https://blog.guidedtrack.com/case-study-using-chatgpt-in-a-guidedtrack-program/
+--ChatGPT API: https://platform.openai.com/docs/api-reference/chat
+--For more information regarding what model to choose, go to https://platform.openai.com/docs/models/overview
+--------------------------------------------------------------
+--inputs:
+--prompt_for_chatgpt: Message to send to ChatGPT. OPTIONAL. If not set, user will be prompted to enter it.
+--model_for_chatgpt: Model to use. OPTIONAL. Default: "gpt-3.5-turbo"
+--max_tokens: The maximum number of tokens to generate in the chat completion. OPTIONAL. Defaults to infinite (no limit on number of tokens to generate)
+--payload: An association with data to send to the ChatGPT API (https://platform.openai.com/docs/api-reference/chat). OPTIONAL. If this variable is set, the variables prompt_for_chatgpt, model_for_chatgpt and max_tokens will be ignored.
+
+--------------------------------------------------------------
+--outputs:
+--payload_error: 1 (when payload is set but is either missing data or misformatted), 0 (when payload is correct)
+--success_chatgpt: 1 (success), 0 (error)
+--response_from_chatgpt: Response from ChatGPT when payload_error=0 success_chatgpt=1
+--error_code_chatgpt: Error code when success_chatgpt=0
+--error_type_chatgpt: Error type when success_chatgpt=0
+--error_from_chatgpt: String combining error code and type when success_chatgpt=0
+
+>>success_chatgpt = 0
+>>error_from_chatgpt = ""
+
+--Check if the payload is set
+*if: payload
+	>>payload_error = 1
+	
+	--Check that the payload is an association		
+	*if: not (payload.type = "association")
+		*html
+			<div class="alert alert-danger">Payload must be an association.</div>
+		*return
+
+	--Check that the payload has the required parameters
+	*if: not payload["model"]
+		*html
+			<div class="alert alert-warning">Model has not been selected. Defaulting to <strong>gpt-3.5-turbo</strong></div>
+		>> payload["model"] = "gpt-3.5-turbo"
+		
+	*if: not payload["messages"]
+		*question: Your message to send to ChatGPT:
+			*type: paragraph
+			*save: prompt_for_chatgpt
+		>> payload["messages"] = [ { "role" -> "user", "content" -> prompt_for_chatgpt } ]
+
+	--Check that the messages object in the payload is correct
+	*if: not payload["messages"].type = "collection"
+		*html
+			<div class="alert alert-danger">Messages object inside payload must be a collection.</div>
+		*return
+	
+	*for: temp_messageData in payload["messages"]
+		*if: not (temp_messageData.type = "association")
+			*html
+				<div class="alert alert-danger">Message data inside list of messages must be an association.</div>
+			*return
+		*if: not temp_messageData["role"]
+			*html
+				<div class="alert alert-danger">Missing key <strong>user</strong> in message data inside list of messages.</div>
+			*return
+		*if: not temp_messageData["role"] in ["system", "user", "assistant"]
+			*html
+				<div class="alert alert-danger">Key <strong>user</strong> in message data value must be one of <code>system</code>, <code>user</code>, or <code>assistant</code>  </div>
+			*return
+		*if: not temp_messageData["content"]
+			*html
+				<div class="alert alert-danger">Missing key <strong>content</strong> in message data inside list of messages.</div>
+			*return
+
+	--If this part of the program is reached, the payload is correct
+	>>payload_error = 0
+
+*if: not payload
+	*if: not prompt_for_chatgpt
+		*question: Your message to send to ChatGPT:
+			*type: paragraph
+			*save: prompt_for_chatgpt
+			
+	*if: not model_for_chatgpt
+		>> model_for_chatgpt = "gpt-3.5-turbo"
+		
+	>> payload = {}
+	>> payload["model"] = model_for_chatgpt
+	>> payload["messages"] = [ { "role" -> "user", "content" -> prompt_for_chatgpt } ]
+	*if: max_tokens
+		>> payload["max_tokens"] = max_tokens
+
+*service: ChatGPT API
+	*path: /chat/completions
+	*method: POST
+	*send: payload
+	*success
+		>> response_from_chatgpt = it["choices"][1]["message"]["content"]
+		>> success_chatgpt = 1
+	*error
+		>> full_error_chatgpt = it
+		>> error_code_chatgpt = it["code"]
+		>> error_type_chatgpt = it["error"]
+		>> error_from_chatgpt = "{error_code_chatgpt}: {error_type_chatgpt}"
+		>> success_chatgpt = 0
+		
+		*if: error_from_chatgpt = "400: Bad Request"
+			>> error_from_chatgpt = "{error_code_chatgpt}: {error_type_chatgpt} For more details, examine the value of the variable full_error_chatgpt"
+		

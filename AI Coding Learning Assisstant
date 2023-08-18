@@ -1,0 +1,63 @@
+*label: Start
+
+*image: https://i.imgur.com/CDPqZ2m.png
+(powered by ChatGPT)
+
+*question: What coding language would you like to code in?
+	*type: choice
+	*save: language
+	*other: OTHER
+	Python
+	Lua
+	Java
+	Javascript
+	C
+	C#
+	C++
+
+*question: What program/concept would you like to learn how to make? (Ex. "how to make a for loop")
+	*type: paragraph
+	*save: user_input_chatgpt
+	
+
+>> prompt_for_chatgpt = "Write code with comments in the “{language}” coding language using this prompt: “{user_input_chatgpt}”"
+
+*label: API Call
+
+Generating your code...
+
+Your request: {user_input_chatgpt}
+
+*image: https://i.imgur.com/agdXz0K.png
+
+>> model_for_chatgpt = "gpt-3.5-turbo"
+
+*program: ChatGPT API - public
+
+*clear
+
+*if: success_chatgpt = 1
+
+	*Your request: {user_input_chatgpt}*
+	
+	*html
+		<pre>{response_from_chatgpt}</pre>
+	
+*if: success_chatgpt = 0
+
+	*{"ERROR FROM THE CHATGPT API:"}*
+
+	{error_from_chatgpt}
+
+-- this is to clear the last chatgpt prompt
+>> payload = false
+
+*question: {""}
+	🔁 Regenerate response
+		*goto: API Call
+			
+	🏁 Start Over
+		*goto: Start
+
+
+
